@@ -1,10 +1,8 @@
-import throttledQueue from './throttlePromise'
 import RichTextResolver from './richTextResolver'
 import { SbHelpers } from './sbHelpers'
 import SbFetch from './sbFetch'
 import { STORYBLOK_AGENT, STORYBLOK_JS_CLIENT_AGENT } from './constants'
 
-import Method from './constants'
 import {
 	ISbStoriesParams,
 	ISbCache,
@@ -17,7 +15,6 @@ import {
 	ISbStoryParams,
 	ISbContentMangmntAPI,
 	ISbNode,
-	ThrottleFn,
 	IMemoryType,
 	ICacheProvider,
 	ISbCustomFetch,
@@ -68,7 +65,6 @@ class Storyblok {
 	private client: SbFetch
 	private maxRetries: number
 	private retriesDelay: number
-	private throttle: ThrottleFn
 	private accessToken: string
 	private cache: ISbCache
 	private helpers: SbHelpers
@@ -117,15 +113,8 @@ class Storyblok {
 			)
 		}
 
-		let rateLimit = 5 // per second for cdn api
-
 		if (config.oauthToken) {
 			headers.set('Authorization', config.oauthToken)
-			rateLimit = 3 // per second for management api
-		}
-
-		if (config.rateLimit) {
-			rateLimit = config.rateLimit
 		}
 
 		if (config.richTextSchema) {
@@ -140,7 +129,6 @@ class Storyblok {
 
 		this.maxRetries = config.maxRetries || 10
 		this.retriesDelay = 300
-		this.throttle = throttledQueue(this.throttledRequest, rateLimit, 1000)
 		this.accessToken = config.accessToken || ''
 		this.relations = {} as RelationsType
 		this.links = {} as LinksType
@@ -272,7 +260,7 @@ class Storyblok {
 
 		this.client.setFetchOptions(fetchOptions)
 
-		return Promise.resolve(this.throttle('post', url, params))
+		return this.client.post(url, params) as Promise<ISbResponseData>
 	}
 
 	public put(
@@ -284,7 +272,7 @@ class Storyblok {
 
 		this.client.setFetchOptions(fetchOptions)
 
-		return Promise.resolve(this.throttle('put', url, params))
+		return this.client.put(url, params) as Promise<ISbResponseData>
 	}
 
 	public delete(
@@ -296,7 +284,7 @@ class Storyblok {
 
 		this.client.setFetchOptions(fetchOptions)
 
-		return Promise.resolve(this.throttle('delete', url, params))
+		return this.client.delete(url, params) as Promise<ISbResponseData>
 	}
 
 	public getStories(
@@ -603,7 +591,7 @@ class Storyblok {
 
 		return new Promise(async (resolve, reject) => {
 			try {
-				const res = await this.throttle('get', url, params)
+				const res = await this.client.get(url, params) as any
 				if (res.status !== 200) {
 					return reject(res)
 				}
@@ -654,14 +642,6 @@ class Storyblok {
 				reject(error)
 			}
 		})
-	}
-
-	private throttledRequest(
-		type: Method,
-		url: string,
-		params: ISbStoriesParams
-	): Promise<unknown> {
-		return this.client[type](url, params)
 	}
 
 	public cacheVersions(): CachedVersions {
